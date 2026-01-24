@@ -1,0 +1,15 @@
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Explicitly deny everything by default
+    // match /{allPaths=**} {
+    //   allow read, write: if false;
+    // }
+
+    // Users folder: The root of all user data
+    // Only the owner can write.
+    // Reads could be restricted, but for now owner-only write is key.
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

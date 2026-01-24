@@ -1,20 +1,32 @@
+import React, { useEffect } from 'react';
+import { RootNavigator } from './src/navigation/RootNavigator';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider } from './src/contexts/AuthContext';
+import { initDatabase } from './src/db/sqlite';
+import NetInfo from '@react-native-community/netinfo';
+import { syncService } from './src/services/syncService';
 
 export default function App() {
+  useEffect(() => {
+    initDatabase().catch(err => console.error(err));
+
+    // Auto-sync when connection is restored
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        syncService.processQueue();
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <RootNavigator />
+        <StatusBar style="auto" />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
