@@ -1,10 +1,10 @@
-# Cotherapist
-
-![Cotherapist Banner](assets/images/banner.png)
-
+# DualTherapist
+ 
+![DualTherapist Banner](assets/images/banner.png)
+ 
 > *Tu asistente de terapia inteligente, siempre disponible.*
-
-Cotherapist es una aplicación móvil inteligente diseñada para asistir a terapeutas en la gestión de sus pacientes y sesiones. La aplicación permite grabar sesiones, gestionar perfiles de pacientes y mantener un registro seguro y sincronizado de la información clínica, funcionando de manera robusta tanto con conexión a internet como en modo offline.
+ 
+DualTherapist es una aplicación móvil inteligente diseñada para asistir a terapeutas en la gestión de sus pacientes y sesiones. La aplicación permite grabar sesiones, gestionar perfiles de pacientes y mantener un registro seguro y sincronizado de la información clínica, funcionando de manera robusta tanto con conexión a internet como en modo offline.
 
 ## Características Principales (Features)
 
@@ -52,7 +52,7 @@ Asegúrate de tener instalado:
 ### 2. Clonar el repositorio
 ```bash
 git clone https://github.com/mrdesautu/cotherapistapp.git
-cd cotherapistapp
+cd dualtherapist
 ```
 
 ### 3. Instalar dependencias

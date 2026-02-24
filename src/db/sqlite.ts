@@ -1,10 +1,35 @@
 import * as SQLite from 'expo-sqlite';
 
-const db = SQLite.openDatabaseSync('cotherapist.db');
+let db: SQLite.SQLiteDatabase | null = null;
+
+export const getDBConnection = () => {
+  if (!db) {
+    try {
+      db = SQLite.openDatabaseSync('dualtherapist.db');
+    } catch (e) {
+      console.error("Failed to open database", e);
+      // Attempt to re-open or handle error
+      throw e;
+    }
+  }
+  return db;
+};
+
+export const closeConnection = () => {
+  if (db) {
+    try {
+      db.closeSync();
+    } catch (e) {
+      console.warn("Error closing DB", e);
+    }
+    db = null;
+  }
+}
 
 export const initDatabase = async () => {
+  const database = getDBConnection();
   try {
-    db.execSync(`
+    database.execSync(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         email TEXT,
@@ -72,5 +97,3 @@ export const initDatabase = async () => {
     throw error;
   }
 };
-
-export const getDBConnection = () => db;

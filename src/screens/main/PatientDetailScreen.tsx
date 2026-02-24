@@ -63,7 +63,7 @@ export const PatientDetailScreen = () => {
             </View>
             <View style={styles.sessionInfo}>
                 <Text style={styles.sessionDate}>{formatDate(item.date)}</Text>
-                <Text style={styles.sessionDuration}>{formatDuration(item.duration)} min</Text>
+                <Text style={styles.sessionDuration}>{formatDuration(item.duration || 0)} min</Text>
             </View>
             <View style={styles.sessionStatus}>
                 {item.audioURL && (

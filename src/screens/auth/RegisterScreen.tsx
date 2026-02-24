@@ -55,7 +55,7 @@ export const RegisterScreen = () => {
                     <ScrollView contentContainerStyle={styles.scrollContent}>
                         <View style={styles.header}>
                             <Text style={styles.title}>Crear Cuenta</Text>
-                            <Text style={styles.subtitle}>Únete a Cotherapist</Text>
+                            <Text style={styles.subtitle}>Únete a DualTherapist</Text>
                         </View>
 
                         <View style={styles.form}>

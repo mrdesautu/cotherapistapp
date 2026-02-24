@@ -1,11 +1,10 @@
 import { getDBConnection } from '../../db/sqlite';
 import { User } from '../../types/User';
 
-const db = getDBConnection();
-
 export const localUserService = {
     saveLocalUser: async (user: User): Promise<void> => {
         try {
+            const db = getDBConnection();
             db.runSync(
                 `INSERT OR REPLACE INTO users (id, email, displayName, photoURL, role, createdAt, lastLoginAt, syncedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -20,14 +19,15 @@ export const localUserService = {
                     Date.now()
                 ]
             );
-        } catch (error) {
-            console.error('Error saving local user:', error);
-            throw error;
+        } catch (error: any) {
+            console.warn('Error saving local user (Safe to ignore if app is reloading):', error.message);
+            // Don't rethrow to avoid crashing the auth flow
         }
     },
 
     getLocalUser: async (userId: string): Promise<User | null> => {
         try {
+            const db = getDBConnection();
             const row = db.getFirstSync<any>(
                 `SELECT * FROM users WHERE id = ?`,
                 [userId]

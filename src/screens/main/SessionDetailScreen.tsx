@@ -9,6 +9,7 @@ import { Audio } from 'expo-av';
 import { Button } from '../../components/common/Button';
 import { useSessions } from '../../hooks/useSessions';
 import { ScreenWrapper } from '../../components/common/ScreenWrapper';
+import { sessionService } from '../../services/sessionService';
 
 type ParamList = {
     SessionDetail: { session: Session; patientName: string };
@@ -16,15 +17,29 @@ type ParamList = {
 
 export const SessionDetailScreen = () => {
     const route = useRoute<RouteProp<ParamList, 'SessionDetail'>>();
-    const navigation = useNavigation();
+    const navigation = useNavigation<any>();
     const { session, patientName } = route.params;
     const { deleteSession } = useSessions();
 
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [position, setPosition] = useState(0);
-    const [duration, setDuration] = useState(session.duration * 1000); // sync with initial known duration
+    const [duration, setDuration] = useState((session.duration || 0) * 1000); // sync with initial known duration
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+
+    // Remote session state (real-time updates)
+    const [remoteSession, setRemoteSession] = useState<Session | null>(session);
+    const [isRequesting, setIsRequesting] = useState(false);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+    useEffect(() => {
+        const unsubscribe = sessionService.subscribeToSession(session.id, (data) => {
+            if (data) {
+                setRemoteSession(data);
+            }
+        });
+        return () => unsubscribe();
+    }, [session.id]);
 
     useEffect(() => {
         return () => {
@@ -33,6 +48,8 @@ export const SessionDetailScreen = () => {
             }
         };
     }, [sound]);
+
+    // OLD handleRequestTranscription REMOVED FROM HERE
 
     const formatTime = (millis: number) => {
         const totalSeconds = Math.floor(millis / 1000);
@@ -76,7 +93,7 @@ export const SessionDetailScreen = () => {
 
             if (status.isLoaded) {
                 console.log('Audio loaded successfully', status.durationMillis);
-                setDuration(status.durationMillis || session.duration * 1000);
+                setDuration(status.durationMillis || (session.duration || 0) * 1000);
             }
 
         } catch (error) {
@@ -112,6 +129,39 @@ export const SessionDetailScreen = () => {
                     await sound.playAsync();
                 }
             }
+        }
+    };
+
+    const handleRequestTranscription = async () => {
+        if (!session.audioURL || session.audioURL.startsWith('file://')) {
+            Alert.alert(
+                "Sincronización en curso",
+                "El audio aún se está subiendo a la nube. Por favor, espera unos segundos e intenta de nuevo."
+            );
+            return;
+        }
+
+        try {
+            setIsRequesting(true);
+            await sessionService.requestTranscription(session, session.patientId);
+            Alert.alert("Solicitud Enviada", "La transcripción ha comenzado. Te notificaremos cuando esté lista.");
+        } catch (error) {
+            console.error(error);
+            Alert.alert("Error", "No se pudo solicitar la transcripción.");
+        } finally {
+            setIsRequesting(false);
+        }
+    };
+
+    const handleGenerateReport = async () => {
+        try {
+            setIsGeneratingReport(true);
+            await sessionService.requestClinicalReport(session.id, session.patientId);
+            Alert.alert("Generando Informe", "El informe clínico se está generando. Verás los resultados en la aplicación en breve.");
+        } catch (error: any) {
+            Alert.alert("Error", error.message || "Hubo un error al solicitar el informe clínico.");
+        } finally {
+            setIsGeneratingReport(false);
         }
     };
 
@@ -165,9 +215,26 @@ export const SessionDetailScreen = () => {
                 <View style={styles.metaContainer}>
                     <Text style={styles.patientName}>{patientName}</Text>
                     <Text style={styles.date}>{formatDate(session.date)}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: session.status === 'completed' ? Colors.success + '20' : Colors.primary + '20' }]}>
-                        <Text style={[styles.statusText, { color: session.status === 'completed' ? Colors.success : Colors.primary }]}>
-                            {session.status === 'completed' ? 'Procesada' : 'Pendiente'}
+                    <View style={[styles.statusBadge, {
+                        backgroundColor:
+                            session.globalStatus === 'COMPLETED' ? Colors.success + '20' :
+                                session.globalStatus === 'PROCESSING' || session.globalStatus === 'GENERATING_REPORT' ? Colors.warning + '20' :
+                                    session.globalStatus === 'FAILED' ? Colors.error + '20' :
+                                        Colors.primary + '20'
+                    }]}>
+                        <Text style={[styles.statusText, {
+                            color:
+                                session.globalStatus === 'COMPLETED' ? Colors.success :
+                                    session.globalStatus === 'PROCESSING' || session.globalStatus === 'GENERATING_REPORT' ? Colors.warning :
+                                        session.globalStatus === 'FAILED' ? Colors.error :
+                                            Colors.primary
+                        }]}>
+                            {
+                                session.globalStatus === 'COMPLETED' ? 'Completado' :
+                                    session.globalStatus === 'PROCESSING' || session.globalStatus === 'GENERATING_REPORT' ? 'Procesando...' :
+                                        session.globalStatus === 'FAILED' ? 'Error' :
+                                            'Pendiente'
+                            }
                         </Text>
                     </View>
                 </View>
@@ -200,6 +267,66 @@ export const SessionDetailScreen = () => {
                         </View>
                     </View>
                 </View>
+
+                {/* AI Analysis Card */}
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>Análisis AI</Text>
+
+                    {!remoteSession?.transcription && remoteSession?.status !== 'processing' && (
+                        <View style={styles.placeholderBox}>
+                            <Text style={styles.placeholderText}>Aún no has analizado esta sesión.</Text>
+                            <Button
+                                title={isRequesting ? "Solicitando..." : "Solicitar Transcripción"}
+                                onPress={handleRequestTranscription}
+                                disabled={isRequesting}
+                            />
+                        </View>
+                    )}
+
+                    {remoteSession?.globalStatus === 'PROCESSING' || remoteSession?.globalStatus === 'GENERATING_REPORT' ? (
+                        <View style={styles.placeholderBox}>
+                            <ActivityIndicator color={Colors.primary} size="small" />
+                            <Text style={[styles.placeholderText, { marginTop: 10 }]}
+                            >Procesando (El informe puede demorar un minuto extra)...</Text>
+                        </View>
+                    ) : null}
+
+                    {remoteSession?.globalStatus === 'COMPLETED' && (
+                        <View>
+                            <View style={[styles.statusBadge, { backgroundColor: Colors.success + '20', marginBottom: 10, alignSelf: 'flex-start' }]}
+                            >
+                                <Text style={[styles.statusText, { color: Colors.success }]}
+                                >Análisis Completado</Text>
+                            </View>
+
+                            {remoteSession.report && remoteSession.report.postSessionReport ? (
+                                <View style={{ marginBottom: 15 }}>
+                                    <Button
+                                        title="Ver Informe Clínico"
+                                        onPress={() => navigation.navigate('ClinicalReportScreen', { reportData: remoteSession.report!.postSessionReport, patientName })}
+                                        variant="primary"
+                                    />
+                                </View>
+                            ) : (
+                                <View style={{ marginBottom: 15 }}>
+                                    <Button
+                                        title={isGeneratingReport ? "Generando..." : "Generar Informe Clínico"}
+                                        onPress={handleGenerateReport}
+                                        disabled={isGeneratingReport || remoteSession?.globalStatus === 'GENERATING_REPORT'}
+                                        variant="outline"
+                                    />
+                                </View>
+                            )}
+
+                            <Button
+                                title="Ver Transcripción Completa"
+                                onPress={() => navigation.navigate('TranscriptionScreen', { content: remoteSession.transcription })}
+                                variant="outline"
+                            />
+                        </View>
+                    )}
+                </View>
+
             </ScrollView>
         </ScreenWrapper>
     );

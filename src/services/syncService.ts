@@ -1,11 +1,11 @@
 import { getDBConnection } from '../db/sqlite';
 import netinfo from '@react-native-community/netinfo';
-import { database, auth } from '../../firebase';
-import { ref, update, remove } from 'firebase/database';
+import { db, auth } from '../../firebase';
+import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { storageService } from './storageService';
 import { localSessionService } from './db/sessionService';
 
-const db = getDBConnection();
+const getDb = () => getDBConnection();
 
 interface SyncItem {
     id: number;
@@ -29,7 +29,8 @@ export const syncService = {
     ) => {
         const dataStr = JSON.stringify(data);
         try {
-            db.runSync(
+            const sqliteDb = getDb();
+            sqliteDb.runSync(
                 `INSERT INTO sync_queue (entityType, entityId, action, data, createdAt, attempts)
          VALUES (?, ?, ?, ?, ?, 0)`,
                 [entityType, entityId, action, dataStr, Date.now()]
@@ -61,7 +62,8 @@ export const syncService = {
             }
 
             // Process in batches
-            const items = db.getAllSync<SyncItem>(
+            const sqliteDb = getDb();
+            const items = sqliteDb.getAllSync<SyncItem>(
                 `SELECT * FROM sync_queue ORDER BY createdAt ASC LIMIT 10`
             );
 
@@ -75,20 +77,20 @@ export const syncService = {
                     await syncService.syncItemToFirebase(item, data);
 
                     // Remove from queue on success
-                    db.runSync(`DELETE FROM sync_queue WHERE id = ?`, [item.id]);
+                    sqliteDb.runSync(`DELETE FROM sync_queue WHERE id = ?`, [item.id]);
                 } catch (error: any) {
                     console.error(`Error syncing item ${item.id}:`, error);
 
                     // If permission denied, likely a bad path or legacy item. Remove strictly to unblock queue.
                     const errString = String(error).toLowerCase();
-                    if (errString.includes('permission_denied') || errString.includes('permission denied')) {
+                    if (errString.includes('permission-denied') || errString.includes('permission_denied') || errString.includes('permission denied')) {
                         console.warn(`Removing item ${item.id} from sync queue due to PERMISSION_DENIED`);
-                        db.runSync(`DELETE FROM sync_queue WHERE id = ?`, [item.id]);
+                        sqliteDb.runSync(`DELETE FROM sync_queue WHERE id = ?`, [item.id]);
                         continue; // Skip incrementing attempts
                     }
 
                     // Increment attempts
-                    db.runSync(
+                    sqliteDb.runSync(
                         `UPDATE sync_queue SET attempts = attempts + 1 WHERE id = ?`,
                         [item.id]
                     );
@@ -96,7 +98,7 @@ export const syncService = {
             }
 
             // Check if more items exist
-            const remaining = db.getAllSync('SELECT count(*) as count FROM sync_queue');
+            const remaining = sqliteDb.getAllSync('SELECT count(*) as count FROM sync_queue');
             // @ts-ignore
             if (remaining[0]?.count > 0) {
                 // Trigger next batch
@@ -114,18 +116,40 @@ export const syncService = {
 
     // Sync individual item
     syncItemToFirebase: async (item: SyncItem, data: any) => {
-        const path = `${item.entityType}/${item.entityId}`; // e.g., patients/123
-        const dbRef = ref(database, path);
+        // Construct path. Use strict Firestore collection paths.
+        // If the entityType is passed as "users/{uid}/patients", Firestore usage is doc(db, "users/{uid}/patients/{id}")
+        // However, doc() takes arguments: doc(db, path) OR doc(db, col, id, col, id...)
+        // To be safe, we split by '/' and pass as args, OR just pass the full path string if it's valid.
+
+        // Assumption: item.entityType is the collection path (e.g. "users/123/sessions")
+        // and item.entityId is the doc ID.
+
+        let docRef;
+        try {
+            // Check if entityType is a path like "patients" or "users/123/patients"
+            // If it starts with users/, it's likely a full path.
+            if (item.entityType.startsWith('users/')) {
+                docRef = doc(db, `${item.entityType}/${item.entityId}`);
+            } else {
+                // Fallback or specific handling if entityType is just "patients" (legacy?)
+                // As we control usage, we should assume entityType is the parent path.
+                docRef = doc(db, `${item.entityType}/${item.entityId}`);
+            }
+        } catch (e) {
+            console.error("Invalid path construction", item.entityType, item.entityId);
+            throw e;
+        }
+
 
         switch (item.action) {
             case 'create':
             case 'update':
                 if (data) {
-                    await update(dbRef, { ...data, lastSyncedAt: Date.now() });
+                    await setDoc(docRef, { ...data, lastSyncedAt: Date.now() }, { merge: true });
                 }
                 break;
             case 'delete':
-                await remove(dbRef);
+                await deleteDoc(docRef);
                 // Also attempt to delete audio file
                 if (item.entityType.includes('sessions')) { // Check if it's a session deletion
                     // entityId is sessionId in this case
@@ -138,7 +162,7 @@ export const syncService = {
                     const downloadUrl = await storageService.uploadSessionAudio(item.entityId, data.localUri);
 
                     // Update the remote session record with the audioURL
-                    await update(dbRef, { audioURL: downloadUrl });
+                    await updateDoc(docRef, { audioURL: downloadUrl });
 
                     // Update local database to reflect the remote URL (verification of upload)
                     await localSessionService.updateSessionAudioUrl(item.entityId, downloadUrl);

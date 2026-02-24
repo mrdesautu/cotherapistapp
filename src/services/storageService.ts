@@ -9,6 +9,20 @@ export const storageService = {
         return uid;
     },
 
+    buildAudioPath: (patientId: string, sessionId: string, ext = 'm4a') => {
+        const template = process.env.EXPO_PUBLIC_STORAGE_SESSION_AUDIO_TEMPLATE || 'patients/{patientId}/sessions/{sessionId}/audio.{ext}';
+        return template
+            .replace('{patientId}', patientId)
+            .replace('{sessionId}', sessionId)
+            .replace('{ext}', ext);
+    },
+
+    buildPhotoPath: (patientId: string) => {
+        const template = process.env.EXPO_PUBLIC_STORAGE_PATIENT_PHOTO_TEMPLATE || 'patients/{patientId}/profile.jpg';
+        return template
+            .replace('{patientId}', patientId);
+    },
+
     /**
      * Uploads a file (blob/file) to Firebase Storage
      * @param uri Local URI of the file
@@ -53,7 +67,7 @@ export const storageService = {
      */
     uploadSessionAudio: async (sessionId: string, uri: string): Promise<string> => {
         const uid = storageService.getCurrentUserId();
-        const path = `users/${uid}/sessions/${sessionId}/audio.m4a`;
+        const path = storageService.buildAudioPath(uid, sessionId, 'm4a');
         return storageService.uploadFile(uri, path);
     },
 
@@ -61,10 +75,8 @@ export const storageService = {
      * Uploads patient profile photo
      */
     uploadPatientPhoto: async (patientId: string, uri: string): Promise<string> => {
-        const uid = storageService.getCurrentUserId();
-        // We append a timestamp to avoid caching issues if updated
-        const timestamp = Date.now();
-        const path = `users/${uid}/patients/${patientId}/profile_${timestamp}.jpg`;
+        // Uses the newly agreed static photo path for the patient
+        const path = storageService.buildPhotoPath(patientId);
         return storageService.uploadFile(uri, path);
     },
 
@@ -74,7 +86,7 @@ export const storageService = {
     deleteSessionAudio: async (sessionId: string): Promise<void> => {
         try {
             const uid = storageService.getCurrentUserId();
-            const path = `users/${uid}/sessions/${sessionId}/audio.m4a`;
+            const path = storageService.buildAudioPath(uid, sessionId, 'm4a');
             const storageRef = ref(storage, path);
             await deleteObject(storageRef);
         } catch (error: any) {

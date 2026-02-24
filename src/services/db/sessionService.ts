@@ -1,12 +1,11 @@
 import { getDBConnection } from '../../db/sqlite';
 import { Session } from '../../types/Session';
 
-const db = getDBConnection();
-
 export const localSessionService = {
     // Get all sessions for a patient
     getSessionsByPatient: async (patientId: string): Promise<Session[]> => {
         try {
+            const db = getDBConnection();
             const rows = db.getAllSync<any>(
                 `SELECT * FROM sessions WHERE patientId = ? ORDER BY date DESC`,
                 [patientId]
@@ -21,6 +20,7 @@ export const localSessionService = {
     // Save session locally
     saveSession: async (session: Session): Promise<void> => {
         try {
+            const db = getDBConnection();
             db.runSync(
                 `INSERT OR REPLACE INTO sessions (
           id, patientId, therapistId, audioURL, duration, date, 
@@ -31,10 +31,10 @@ export const localSessionService = {
                     session.patientId,
                     session.therapistId,
                     session.audioURL || null,
-                    session.duration,
+                    session.duration || 0,
                     session.date,
                     session.notes || null,
-                    session.status,
+                    session.status || 'PENDING_UPLOAD',
                     session.createdAt,
                     session.syncedAt || null,
                     session.isDirty || 1
@@ -49,6 +49,7 @@ export const localSessionService = {
     // Update session audio URL after upload
     updateSessionAudioUrl: async (sessionId: string, audioURL: string): Promise<void> => {
         try {
+            const db = getDBConnection();
             db.runSync(
                 `UPDATE sessions SET audioURL = ?, syncedAt = ? WHERE id = ?`,
                 [audioURL, Date.now(), sessionId]
@@ -61,6 +62,7 @@ export const localSessionService = {
     // Delete session locally
     deleteSession: async (sessionId: string): Promise<void> => {
         try {
+            const db = getDBConnection();
             db.runSync(`DELETE FROM sessions WHERE id = ?`, [sessionId]);
         } catch (error) {
             console.error('Error deleting local session:', error);

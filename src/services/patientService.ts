@@ -1,5 +1,5 @@
-import { database, auth } from '../../firebase';
-import { ref, set, get, remove, update } from 'firebase/database';
+import { db, auth } from '../../firebase';
+import { doc, setDoc, updateDoc, deleteDoc, getDocs, collection } from 'firebase/firestore';
 import { Patient } from '../types/Patient';
 
 export const patientService = {
@@ -13,38 +13,34 @@ export const patientService = {
     // Create patient in Firebase under User's node
     createPatient: async (patient: Patient): Promise<void> => {
         const uid = patientService.getCurrentUserId();
-        const patientRef = ref(database, `users/${uid}/patients/${patient.id}`);
-        await set(patientRef, patient);
+        const patientRef = doc(db, 'users', uid, 'patients', patient.id);
+        await setDoc(patientRef, patient);
     },
 
     // Update patient
     updatePatient: async (patientId: string, data: Partial<Patient>): Promise<void> => {
         const uid = patientService.getCurrentUserId();
-        const patientRef = ref(database, `users/${uid}/patients/${patientId}`);
-        await update(patientRef, data);
+        const patientRef = doc(db, 'users', uid, 'patients', patientId);
+        await updateDoc(patientRef, data);
     },
 
     // Delete patient
     deletePatient: async (patientId: string): Promise<void> => {
         const uid = patientService.getCurrentUserId();
-        const patientRef = ref(database, `users/${uid}/patients/${patientId}`);
-        await remove(patientRef);
+        const patientRef = doc(db, 'users', uid, 'patients', patientId);
+        await deleteDoc(patientRef);
     },
 
     // Get patients (only for the current therapist)
     getPatients: async (therapistId: string): Promise<Patient[]> => {
-        // We can ignore the passed therapistId and use the auth one for security, 
-        // or ensure they match. For now, using auth.
         const uid = patientService.getCurrentUserId();
 
         // Direct fetch from users/{uid}/patients
-        const patientsRef = ref(database, `users/${uid}/patients`);
-        const snapshot = await get(patientsRef);
+        const patientsRef = collection(db, 'users', uid, 'patients');
+        const snapshot = await getDocs(patientsRef);
 
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            // Convert object to array
-            return Object.values(data) as Patient[];
+        if (!snapshot.empty) {
+            return snapshot.docs.map(doc => doc.data() as Patient);
         }
         return [];
     }

@@ -3,6 +3,7 @@ import { sessionService } from '../services/sessionService';
 import { syncService } from '../services/syncService';
 import { Session } from '../types/Session';
 import * as Crypto from 'expo-crypto';
+import { buildSessionsNodePath } from '../utils/rtdbPathBuilder';
 
 export const sessionRepository = {
     createSession: async (
@@ -16,19 +17,21 @@ export const sessionRepository = {
             patientId,
             therapistId,
             audioURL: audioUri, // Initially local URI
-            duration,
+            duration: 0,
             date: Date.now(),
-            status: 'pending',
+            status: 'PENDING_UPLOAD',
+            globalStatus: 'PENDING_UPLOAD',
             createdAt: Date.now(),
+            updatedAt: Date.now(),
             syncedAt: 0,
-            isDirty: 1
+            isDirty: 1,
         };
 
         // 1. Save locally
         await localSessionService.saveSession(newSession);
 
         // 2. Queue for sync
-        const syncPath = `users/${therapistId}/sessions`;
+        const syncPath = buildSessionsNodePath(therapistId);
 
         // Queue metadata creation
         await syncService.addToQueue(syncPath, newSession.id, 'create', newSession);
@@ -48,7 +51,7 @@ export const sessionRepository = {
         await localSessionService.deleteSession(sessionId);
 
         // 2. Queue for sync (delete from remote)
-        const syncPath = `users/${therapistId}/sessions`;
+        const syncPath = buildSessionsNodePath(therapistId);
         await syncService.addToQueue(syncPath, sessionId, 'delete', {});
     }
 };

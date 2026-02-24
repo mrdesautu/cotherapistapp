@@ -1,12 +1,11 @@
 import { getDBConnection } from '../../db/sqlite';
 import { Patient } from '../../types/Patient';
 
-const db = getDBConnection();
-
 export const localPatientService = {
     // Get all patients for a therapist
     getPatients: async (therapistId: string): Promise<Patient[]> => {
         try {
+            const db = getDBConnection();
             const rows = db.getAllSync<any>(
                 `SELECT * FROM patients WHERE therapistId = ? ORDER BY name ASC`,
                 [therapistId]
@@ -21,6 +20,7 @@ export const localPatientService = {
     // Get single patient
     getPatient: async (patientId: string): Promise<Patient | null> => {
         try {
+            const db = getDBConnection();
             const row = db.getFirstSync<any>(
                 `SELECT * FROM patients WHERE id = ?`,
                 [patientId]
@@ -35,6 +35,7 @@ export const localPatientService = {
     // Create or Update patient locally
     savePatient: async (patient: Patient): Promise<void> => {
         try {
+            const db = getDBConnection();
             db.runSync(
                 `INSERT OR REPLACE INTO patients (
           id, name, email, phone, photoURL, therapistId, 
@@ -64,6 +65,7 @@ export const localPatientService = {
     // Delete patient locally
     deletePatient: async (patientId: string): Promise<void> => {
         try {
+            const db = getDBConnection();
             db.runSync(`DELETE FROM patients WHERE id = ?`, [patientId]);
         } catch (error) {
             console.error('Error deleting local patient:', error);

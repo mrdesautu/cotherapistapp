@@ -1,10 +1,12 @@
-import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getDatabase } from 'firebase/database';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import { initializeAuth, getAuth, Auth } from 'firebase/auth';
+// @ts-ignore
+import { getReactNativePersistence } from '@firebase/auth';
+
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Configuración de Firebase para Cotherapist
+// Configuración de Firebase para DualTherapist
 // Credenciales extraídas de GoogleService-Info.plist
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -16,16 +18,28 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
-// Inicializar Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase safely
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Inicializar Auth con persistencia en AsyncStorage
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// Initialize Auth safely
+let auth: Auth;
+try {
+  auth = getAuth(app);
+} catch (e) {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+  });
+}
 
-// Exportar servicios
-export { auth };
+// Initialize Firestore
+import { getFirestore } from 'firebase/firestore';
+export const db = getFirestore(app);
+
+// Initialize Realtime Database
+import { getDatabase } from 'firebase/database';
 export const database = getDatabase(app);
+
+// Export services
+export { auth };
 export const storage = getStorage(app);
 export default app;

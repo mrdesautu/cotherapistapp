@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Cotherapist",
-    "slug": "cotherapist",
-    "scheme": "cotherapist",
+    "name": "DualTherapist",
+    "slug": "dualtherapist",
+    "scheme": "dualtherapist",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cotherapist.app",
+      "bundleIdentifier": "com.dualtherapist.app",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Esta app necesita acceso al micrófono para grabar sesiones de terapia.",
@@ -28,7 +28,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.cotherapist.app",
+      "package": "com.dualtherapist.app",
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
@@ -41,6 +41,12 @@
     },
     "plugins": [
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7574fb09-4a17-4699-b2b2-a0364d7549ff"
+      }
+    },
+    "owner": "medesautu"
   }
 }

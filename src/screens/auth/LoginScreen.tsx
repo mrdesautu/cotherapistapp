@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
+import { authService } from '../../services/authService';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Colors } from '../../constants/Colors';
@@ -18,7 +19,12 @@ export const LoginScreen = () => {
     const [loading, setLoading] = useState(false);
 
     const [request, response, promptAsync] = Google.useAuthRequest({
-        iosClientId: '907064128928-ffe8onabhdflto25ndl0flctsg1shefu.apps.googleusercontent.com',
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        redirectUri: makeRedirectUri({
+            scheme: 'dualtherapist'
+        }),
     });
 
     useEffect(() => {
@@ -55,6 +61,35 @@ export const LoginScreen = () => {
         }
     };
 
+    const handleForgotPassword = () => {
+        if (!email) {
+            Alert.alert('Recuperar contraseña', 'Por favor ingresa tu email en el campo de arriba para enviarte las instrucciones de recuperación.');
+            return;
+        }
+
+        Alert.alert(
+            'Recuperar contraseña',
+            `¿Enviar instrucciones de recuperación a ${email}?`,
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Enviar',
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await authService.resetPassword(email);
+                            Alert.alert('Correo enviado', 'Revisa tu bandeja de entrada para restablecer tu contraseña.');
+                        } catch (error: any) {
+                            Alert.alert('Error', 'No se pudo enviar el correo. Verifica que el email sea correcto.');
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     return (
         <WaveBackground>
             <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
@@ -64,7 +99,7 @@ export const LoginScreen = () => {
                 >
                     <ScrollView contentContainerStyle={styles.scrollContent}>
                         <View style={styles.header}>
-                            <Text style={styles.title}>Cotherapist</Text>
+                            <Text style={styles.title}>DualTherapist</Text>
                             <Text style={styles.subtitle}>Tu asistente de terapia inteligente</Text>
                         </View>
 
@@ -89,6 +124,15 @@ export const LoginScreen = () => {
                                 isPassword
                                 icon="lock-closed-outline"
                             />
+
+                            <View style={{ alignItems: 'flex-end', marginBottom: 20 }}>
+                                <Button
+                                    title="¿Olvidaste tu contraseña?"
+                                    onPress={handleForgotPassword}
+                                    variant="text"
+                                    style={{ padding: 0 }}
+                                />
+                            </View>
 
                             <Button
                                 title="Iniciar Sesión"

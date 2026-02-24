@@ -9,6 +9,9 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProfileImagePicker } from '../../components/profile/ProfileImagePicker';
 import { useAuth } from '../../hooks/useAuth';
 import { ScreenWrapper } from '../../components/common/ScreenWrapper';
+import { appointmentService } from '../../services/appointmentService';
+import { GlassCard } from '../../components/common/GlassCard';
+import * as WebBrowser from 'expo-web-browser';
 
 export const AccountScreen = () => {
     const { user, signOut, updateUserProfile, updateProfileImage } = useAuth();
@@ -51,6 +54,15 @@ export const AccountScreen = () => {
             Alert.alert('Error', 'No se pudo actualizar el perfil');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleConnectGoogle = async () => {
+        try {
+            const url = await appointmentService.getGoogleAuthUrl();
+            await WebBrowser.openBrowserAsync(url);
+        } catch (error: any) {
+            Alert.alert('Error', 'No se pudo iniciar la conexión con Google');
         }
     };
 
@@ -138,6 +150,31 @@ export const AccountScreen = () => {
                     <View style={styles.divider} />
                     <View style={styles.spacer} />
 
+                    <Text style={styles.sectionTitle}>Sincronización</Text>
+                    <View style={styles.spacer} />
+
+                    <GlassCard style={styles.syncCard}>
+                        <View style={styles.syncCardContent}>
+                            <View style={styles.syncIconContainer}>
+                                <Ionicons name="logo-google" size={24} color={Colors.primary} />
+                            </View>
+                            <View style={styles.syncTextContainer}>
+                                <Text style={styles.syncTitle}>Google Calendar</Text>
+                                <Text style={styles.syncDescription}>Sincronizá tus turnos automáticamente.</Text>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.connectButton}
+                                onPress={handleConnectGoogle}
+                            >
+                                <Text style={styles.connectButtonText}>Conectar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </GlassCard>
+
+                    <View style={styles.spacer} />
+                    <View style={styles.divider} />
+                    <View style={styles.spacer} />
+
                     <Button
                         title="Cerrar Sesión"
                         onPress={handleSignOut}
@@ -187,5 +224,53 @@ const styles = StyleSheet.create({
     divider: {
         height: 1,
         backgroundColor: Colors.border
-    }
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: Colors.text,
+    },
+    syncCard: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderColor: Colors.border,
+        borderWidth: 1,
+    },
+    syncCardContent: {
+        padding: 15,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    syncIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(123, 44, 191, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    syncTextContainer: {
+        flex: 1,
+    },
+    syncTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: Colors.text,
+    },
+    syncDescription: {
+        fontSize: 12,
+        color: Colors.textLight,
+        marginTop: 2,
+    },
+    connectButton: {
+        backgroundColor: Colors.primary,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    connectButtonText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
 });

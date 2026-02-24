@@ -10,6 +10,7 @@ export const Colors = {
     border: '#E5E5E5',
     success: '#06D6A0',
     error: '#EF476F',
+    warning: '#FFD166',        // Amarillo/Naranja para alertas
     wave1: '#C77DFF',         // Ondas decorativas
     wave2: '#FFD60A',
     white: '#FFFFFF',

@@ -4,6 +4,7 @@ import { syncService } from '../services/syncService';
 import { Patient } from '../types/Patient';
 import netinfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
+import { buildPatientsNodePath } from '../utils/rtdbPathBuilder';
 
 export const patientRepository = {
     // Get patients (Offline-first strategy)
@@ -45,7 +46,7 @@ export const patientRepository = {
         await localPatientService.savePatient(newPatient);
 
         // 2. Queue for sync
-        const syncPath = `users/${newPatient.therapistId}/patients`;
+        const syncPath = buildPatientsNodePath(newPatient.therapistId);
         await syncService.addToQueue(syncPath, newPatient.id, 'create', newPatient);
 
         return newPatient;

@@ -1,0 +1,239 @@
+rules_version = '2';
+
+/**
+ * Firestore Security Rules — DualTherapist v2
+ * Last updated: 2026-02-24
+ *
+ * Architecture context:
+ *  - The backend (Node.js/Express) interacts with Firestore via the Admin SDK,
+ *    which BYPASSES these rules entirely. Rules protect direct client access only.
+ *  - Mobile app (React Native) uses the client SDK → rules enforced.
+ *  - Web frontend (React) uses the client SDK → rules enforced.
+ *
+ * Access model:
+ *  - therapist: can read patient sessions if an active TherapistPatient record exists.
+ *  - patient:   owns their own data; can only access their own sessions.
+ *  - historical: read-only to sessions where their UID is in participants[].
+ *
+ * Immutability:
+ *  - consents and deletion_requests are write-once (no update, no delete from client).
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ─────────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isOwner(userId) {
+      return isAuth() && uid() == userId;
+    }
+
+    /** Check if a TherapistPatient relationship exists with a given status */
+    function hasRelationship(therapistId, patientId, status) {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/therapist_patients/$(therapistId + '_' + patientId)) &&
+        get(/databases/$(database)/documents/therapist_patients/$(therapistId + '_' + patientId)).data.status == status;
+    }
+
+    /** Active therapist-patient relationship */
+    function isActiveTherapistOf(patientId) {
+      return hasRelationship(uid(), patientId, 'active');
+    }
+
+    /** Historical relationship (read-only, participant-filtered) */
+    function isHistoricalTherapistOf(patientId) {
+      return hasRelationship(uid(), patientId, 'historical');
+    }
+
+    // ─── Users Collection ─────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Users can only read and write their own profile
+      allow read, write: if isOwner(userId);
+
+      // Therapists can read a patient's basic profile when there is an active relationship.
+      // (needed for the therapist dashboard to display patient name/avatar)
+      allow read: if isAuth() && isActiveTherapistOf(userId);
+    }
+
+    // ─── Sessions (Root Collection — vector store + metadata) ─────────────────
+    match /sessions/{sessionId} {
+      // Patients: read their own sessions (patientId field)
+      allow read: if isAuth() && resource.data.patient_id == uid();
+
+      // Therapists: read if active OR historical (participant-filtered)
+      allow read: if isAuth() &&
+        (
+          isActiveTherapistOf(resource.data.patient_id) ||
+          (isHistoricalTherapistOf(resource.data.patient_id) &&
+           uid() in resource.data.participants)
+        );
+
+      // Create: backend Admin SDK handles this. Clients should never write directly.
+      allow create: if false;
+
+      // Update/Delete: blocked from client — only Admin SDK (backend deletionService)
+      allow update, delete: if false;
+
+      // ── Chunks subcollection (RAG embeddings) ──────────────────────────────
+      match /chunks/{chunkId} {
+        allow read: if isAuth() &&
+          (
+            get(/databases/$(database)/documents/sessions/$(sessionId)).data.patient_id == uid() ||
+            isActiveTherapistOf(
+              get(/databases/$(database)/documents/sessions/$(sessionId)).data.patient_id
+            ) ||
+            (
+              isHistoricalTherapistOf(
+                get(/databases/$(database)/documents/sessions/$(sessionId)).data.patient_id
+              ) &&
+              uid() in get(/databases/$(database)/documents/sessions/$(sessionId)).data.participants
+            )
+          );
+        allow write: if false;
+      }
+
+      // ── Analysis subcollection (clinical reports) ──────────────────────────
+      match /analysis/{docId} {
+        allow read: if isAuth() &&
+          (
+            get(/databases/$(database)/documents/sessions/$(sessionId)).data.patient_id == uid() ||
+            isActiveTherapistOf(
+              get(/databases/$(database)/documents/sessions/$(sessionId)).data.patient_id
+            )
+          );
+        allow write: if false;
+      }
+    }
+
+    // ─── Session Files (Backend collection for session metadata) ─────────────
+    // Note: Most operations go through the Admin SDK. These rules protect mobile reads.
+    match /session_files/{sessionId} {
+      allow read: if isAuth() &&
+        (
+          resource.data.patientId == uid() ||
+          isActiveTherapistOf(resource.data.patientId) ||
+          (
+            isHistoricalTherapistOf(resource.data.patientId) &&
+            uid() in resource.data.participants
+          )
+        );
+      allow write: if false; // Admin SDK only
+    }
+
+    // ─── Therapist-Patient Relationships ─────────────────────────────────────
+    match /therapist_patients/{relationshipId} {
+      // Read: both parties can read their own relationships
+      allow read: if isAuth() &&
+        (resource.data.therapistId == uid() || resource.data.patientId == uid());
+
+      // Create: backend Admin SDK only (invitationService.acceptInvitation)
+      allow create: if false;
+
+      // Update/Delete: blocked — use backend delink endpoint
+      allow update, delete: if false;
+    }
+
+    // ─── Consents (IMMUTABLE — write-once) ───────────────────────────────────
+    // Created only by the backend. Clients can read their own records.
+    // No client can update or delete a consent record.
+    match /consents/{consentId} {
+      // Only the consent owner can read their own record
+      allow read: if isAuth() && resource.data.userId == uid();
+
+      // Also allow therapist to read patient consents for audit (active relationship required)
+      allow read: if isAuth() && isActiveTherapistOf(resource.data.userId);
+
+      // Write: backend Admin SDK only
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
+    // ─── Deletion Requests (IMMUTABLE audit trail) ────────────────────────────
+    // Created only by the backend. Patients can read their own requests.
+    // No client can update or delete (marking 'executed' is done by Admin SDK).
+    match /deletion_requests/{requestId} {
+      // Patient reads their own requests
+      allow read: if isAuth() && resource.data.requestedBy == uid();
+
+      // Participants (therapists) can read requests that affect their sessions
+      allow read: if isAuth() && uid() in resource.data.participants;
+
+      // Write: backend Admin SDK only
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
+    // ─── Invitation Tokens ────────────────────────────────────────────────────
+    // Read-only for clients (patients check their pending invitations).
+    // All writes go through the backend Admin SDK.
+    match /invitation_tokens/{tokenId} {
+      // Patient reads invitations sent to their email or their own codes
+      allow read: if isAuth() &&
+        (
+          resource.data.fromUserId == uid() ||
+          resource.data.toEmail == request.auth.token.email
+        );
+
+      // Write: backend Admin SDK only
+      allow write: if false;
+    }
+
+    // ─── Ingestion Status (TTL 30 days) ───────────────────────────────────────
+    match /ingestion_status/{docId} {
+      // Patient and active therapist can poll processing status
+      allow read: if isAuth() &&
+        (
+          resource.data.patient_id == uid() ||
+          isActiveTherapistOf(resource.data.patient_id)
+        );
+      allow write: if false; // AI service Admin SDK only
+    }
+
+    // ─── Clinical Analysis v7 (AI-generated — read-only for clients) ──────────
+    match /clinical_analysis_v7/{docId} {
+      allow read: if isAuth() &&
+        (
+          resource.data.patient_id == uid() ||
+          isActiveTherapistOf(resource.data.patient_id)
+        );
+      allow write: if false; // AI service Admin SDK only
+    }
+
+    // ─── OTP Email Verification (write-once by backend) ───────────────────────
+    match /email_otps/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false; // backend Admin SDK only
+    }
+
+    // ─── Processing Queue ─────────────────────────────────────────────────────
+    match /processing_queue/{taskId} {
+      allow read: if isAuth() && resource.data.therapistId == uid();
+      allow write: if false;
+    }
+
+    // ─── Therapeutic Tasks Catalog (read-only) ────────────────────────────────
+    match /therapeutic_tasks/{taskId} {
+      allow read: if isAuth();
+      allow write: if false; // Admin only via console
+    }
+
+    // ─── Legacy: user-scoped session subcollection (backward compat) ──────────
+    match /users/{userId}/sessions/{sessionId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ─── Catch-All: Deny Everything Else ─────────────────────────────────────
+    // Explicit deny prevents accidental access to any undeclared collections.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
