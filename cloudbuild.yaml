@@ -1,0 +1,42 @@
+steps:
+  # 1. Build the image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/dualtherapist-repo/mobile-web:$SHORT_SHA"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/dualtherapist-repo/mobile-web:${_ENV}"
+      - "."
+
+  # 2. Push the image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/dualtherapist-repo/mobile-web:$SHORT_SHA"
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/dualtherapist-repo/mobile-web:${_ENV}"
+
+  # 3. Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "mobile-web-${_ENV}"
+      - "--image"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/dualtherapist-repo/mobile-web:$SHORT_SHA"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+
+substitutions:
+  _ENV: dev
+
+options:
+  logging: CLOUD_LOGGING_ONLY
